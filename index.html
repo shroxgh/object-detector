@@ -70,7 +70,7 @@
       person: 5,
       car: 1,
       truck: 1,
-      bus: 10, // school bus not separated in COCO-SSD, use 'bus'
+      bus: 10,
       mailbox: 3,
       stop_sign: 2,
       sign: 2,
@@ -108,9 +108,11 @@
 
     const targetClasses = Object.keys(objectPoints);
 
-    function resizeCanvas() {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    function resizeCanvasIfNeeded() {
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
     }
 
     async function setupCamera(facingMode = 'environment') {
@@ -128,7 +130,7 @@
 
       return new Promise(resolve => {
         video.onloadedmetadata = () => {
-          resizeCanvas();
+          resizeCanvasIfNeeded();
           resolve(video);
         };
       });
@@ -142,7 +144,7 @@
 
     function detectFrame() {
       model.detect(video).then(predictions => {
-        resizeCanvas();
+        resizeCanvasIfNeeded();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         predictions.forEach((pred, index) => {
           const objClass = pred.class.toLowerCase().replace(/\s/g, '_');
@@ -155,7 +157,7 @@
 
           ctx.lineWidth = objClass === 'bus' ? 5 : 2;
           ctx.strokeStyle = objClass === 'bus' ? 'red' : 'lime';
-          ctx.fillStyle = objClass === 'bus' ? 'red' : 'lime';
+          ctx.fillStyle = ctx.strokeStyle;
 
           ctx.strokeRect(x, y, width, height);
           ctx.font = 'bold 20px Arial';
@@ -170,6 +172,10 @@
       currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
       video.style.transform = currentFacingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
       await setupCamera(currentFacingMode);
+    });
+
+    window.addEventListener("orientationchange", () => {
+      setTimeout(() => resizeCanvasIfNeeded(), 500);
     });
 
     main();
