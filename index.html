@@ -1,15 +1,58 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Real-Time Object Detection</title>
+  <title>Filtered Object Detection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    canvas { position: absolute; top: 0; left: 0; z-index: 1; }
-    video  { position: absolute; top: 0; left: 0; z-index: 0; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      overflow: hidden;
+      height: 100%;
+    }
+
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+    }
+
+    #switchBtn {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.8);
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    #switchBtn svg {
+      width: 24px;
+      height: 24px;
+      fill: #000;
+    }
   </style>
 </head>
 <body>
-  <video id="video" width="640" height="480" autoplay muted></video>
-  <canvas id="canvas" width="640" height="480"></canvas>
+  <button id="switchBtn" aria-label="Switch Camera">
+    <svg viewBox="0 0 24 24">
+      <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5 0 .34-.03.67-.1.99l1.53 1.53C18.8 14.36 19 13.2 19 12c0-3.87-3.13-7-7-7zm-1 10c-2.76 0-5-2.24-5-5 0-.34.03-.67.1-.99L4.57 8.48C4.2 9.64 4 10.8 4 12c0 3.87 3.13 7 7 7v3l4-4-4-4v3z"/>
+    </svg>
+  </button>
+
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
@@ -17,36 +60,117 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const switchBtn = document.getElementById('switchBtn');
 
-    async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    let currentFacingMode = 'environment';
+    let currentStream;
+    let model;
+
+    const objectPoints = {
+      person: 5,
+      car: 1,
+      truck: 1,
+      bus: 10, // school bus not separated in COCO-SSD, use 'bus'
+      mailbox: 3,
+      stop_sign: 2,
+      sign: 2,
+      pole: 2,
+      dog: 2,
+      cat: 2,
+      bird: 2,
+      horse: 2,
+      sheep: 2,
+      cow: 2,
+      elephant: 2,
+      bear: 2,
+      zebra: 2,
+      giraffe: 2,
+      bicycle: 4,
+      motorcycle: 4
+    };
+
+    const objectLabels = {
+      bus: "School Bus",
+      stop_sign: "Stop Sign",
+      bicycle: "Bike",
+      motorcycle: "Motorcycle",
+      dog: "Dog",
+      cat: "Cat",
+      bird: "Bird",
+      horse: "Horse",
+      sheep: "Sheep",
+      cow: "Cow",
+      elephant: "Elephant",
+      bear: "Bear",
+      zebra: "Zebra",
+      giraffe: "Giraffe"
+    };
+
+    const targetClasses = Object.keys(objectPoints);
+
+    function resizeCanvas() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    async function setupCamera(facingMode = 'environment') {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: facingMode } },
+        audio: false
+      });
+
+      currentStream = stream;
       video.srcObject = stream;
-      return new Promise((resolve) => {
-        video.onloadedmetadata = () => resolve(video);
+
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => {
+          resizeCanvas();
+          resolve(video);
+        };
       });
     }
 
     async function main() {
-      await setupCamera();
-      const model = await cocoSsd.load();
-      detectFrame(video, model);
+      await setupCamera(currentFacingMode);
+      model = await cocoSsd.load();
+      detectFrame();
     }
 
-    function detectFrame(video, model) {
+    function detectFrame() {
       model.detect(video).then(predictions => {
+        resizeCanvas();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         predictions.forEach((pred, index) => {
+          const objClass = pred.class.toLowerCase().replace(/\s/g, '_');
+          if (!targetClasses.includes(objClass)) return;
+
           const [x, y, width, height] = pred.bbox;
-          ctx.strokeStyle = 'hsl(' + (index * 40) + ', 100%, 50%)';
-          ctx.lineWidth = 2;
+          const points = objectPoints[objClass];
+          const displayName = objectLabels[pred.class] || pred.class;
+          const displayText = `${displayName} — +${points} Points!`;
+
+          ctx.lineWidth = objClass === 'bus' ? 5 : 2;
+          ctx.strokeStyle = objClass === 'bus' ? 'red' : 'lime';
+          ctx.fillStyle = objClass === 'bus' ? 'red' : 'lime';
+
           ctx.strokeRect(x, y, width, height);
-          ctx.fillStyle = ctx.strokeStyle;
-          ctx.font = '16px Arial';
-          ctx.fillText(`${index + 1}: ${pred.class}`, x, y > 20 ? y - 5 : y + 20);
+          ctx.font = 'bold 20px Arial';
+          ctx.fillText(displayText, x, y > 20 ? y - 5 : y + 25);
         });
-        requestAnimationFrame(() => detectFrame(video, model));
+
+        requestAnimationFrame(detectFrame);
       });
     }
+
+    switchBtn.addEventListener('click', async () => {
+      currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+      video.style.transform = currentFacingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+      await setupCamera(currentFacingMode);
+    });
 
     main();
   </script>
