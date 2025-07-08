@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Real-Time Object Detection</title>
+  <style>
+    canvas { position: absolute; top: 0; left: 0; z-index: 1; }
+    video  { position: absolute; top: 0; left: 0; z-index: 0; }
+  </style>
+</head>
+<body>
+  <video id="video" width="640" height="480" autoplay muted></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
+    async function main() {
+      await setupCamera();
+      const model = await cocoSsd.load();
+      detectFrame(video, model);
+    }
+
+    function detectFrame(video, model) {
+      model.detect(video).then(predictions => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        predictions.forEach((pred, index) => {
+          const [x, y, width, height] = pred.bbox;
+          ctx.strokeStyle = 'hsl(' + (index * 40) + ', 100%, 50%)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, width, height);
+          ctx.fillStyle = ctx.strokeStyle;
+          ctx.font = '16px Arial';
+          ctx.fillText(`${index + 1}: ${pred.class}`, x, y > 20 ? y - 5 : y + 20);
+        });
+        requestAnimationFrame(() => detectFrame(video, model));
+      });
+    }
+
+    main();
+  </script>
+</body>
+</html>
